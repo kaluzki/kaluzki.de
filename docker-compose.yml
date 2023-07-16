@@ -47,16 +47,13 @@ services:
       - "--certificatesresolvers.certs.acme.httpchallenge.entrypoint=80"
     labels:
       traefik.enable: true
-
-      traefik.http.routers.80-proxy.service: api@internal
-      traefik.http.routers.80-proxy.entrypoints: 80
-      traefik.http.routers.80-proxy.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN-app.localhost}}`)
-
+      traefik.http.routers.80-traefik.service: api@internal
+      traefik.http.routers.80-traefik.entrypoints: 80
+      traefik.http.routers.80-traefik.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN-app.localhost}}`)
       # https://doc.traefik.io/traefik/middlewares/http/redirectscheme/
       traefik.http.middlewares.redirect-https.redirectscheme.scheme: https
       traefik.http.middlewares.redirect-https.redirectscheme.permanent: true
-      traefik.http.routers.80-proxy.middlewares: redirect-https@docker
-
+      traefik.http.routers.80-traefik.middlewares: redirect-https@docker
       # https://doc.traefik.io/traefik/middlewares/http/basicauth/
       # sudo apt install -y apache2-utils
       # htpasswd -nB admin
@@ -69,14 +66,46 @@ services:
       traefik.http.routers.443-traefik.tls.certresolver: certs
       traefik.http.routers.443-traefik.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN:-app.localhost}}`)
 
-      traefik.http.routers.443-proxy.service: api@internal
-      traefik.http.routers.443-proxy.entrypoints: 443
-      traefik.http.routers.443-proxy.tls: true
-      traefik.http.routers.443-proxy.tls.certresolver: certs
-      traefik.http.routers.443-proxy.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN:-app.localhost}}`)
+  mysql:
+    image: mysql:5
+    hostname: mysql
+    container_name: mysql
+    restart: unless-stopped
+    networks:
+      - ${APPS_NETWORK:-apps}
+    volumes:
+      - mysql:/var/lib/mysql
+    environment:
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-${MYSQL_PASSWORD:-root}}
+
+  pma:
+    image: phpmyadmin:5.2
+    hostname: pma
+    container_name: pma
+    restart: unless-stopped
+    networks:
+      - ${APPS_NETWORK:-apps}
+    environment:
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-${MYSQL_PASSWORD:-root}}
+      PMA_HOST: mysql
+      PMA_ARBITRARY: ${PMA_ARBITRARY:-0}
+    labels:
+      traefik.enable: true
+      traefik.http.routers.80-pma.entrypoints: 80
+      traefik.http.routers.80-pma.rule: Host(`${PMA_DOMAIN:-pma.${APPS_DOMAIN:-app.localhost}}`)
+      traefik.http.routers.80-pma.middlewares: redirect-https@docker
+      traefik.http.routers.443-pma.entrypoints: 443
+      traefik.http.routers.443-pma.tls: true
+      traefik.http.routers.443-pma.tls.certresolver: certs
+      traefik.http.routers.443-pma.rule: Host(`${PMA_DOMAIN:-pma.${APPS_DOMAIN:-app.localhost}}`)
 
 volumes:
   traefik:
+  mysql:
 
 networks:
   apps:
