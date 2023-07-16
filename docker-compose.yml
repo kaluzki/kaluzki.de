@@ -1,0 +1,79 @@
+version: '3.7'
+
+services:
+
+  data:
+    image: busybox
+    container_name: traefik-data
+    network_mode: "none"
+    restart: "no"
+    volumes:
+      - data:/data
+    command: sh -c "chmod -Rv 600 /data/*"
+
+  proxy:
+    depends_on:
+      - data
+    image: traefik:2.10.3
+    hostname: traefik
+    container_name: traefik
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - ${APPS_NETWORK:-apps}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - data:/data
+      - ${TRAEFIK_CONFIG:-/dev/null}:/config:ro
+
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+#      - "--log.level=debug"
+#      - "--api.debug=true"
+      - "--api=true"
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/config"
+      - "--providers.file.watch=true"
+      - "--entrypoints.80.address=:80"
+      - "--entrypoints.443.address=:443"
+      - "--certificatesresolvers.certs.acme.storage=/data/acme.json"
+      - "--certificatesresolvers.certs.acme.httpchallenge.entrypoint=80"
+    labels:
+      traefik.enable: true
+
+      traefik.http.routers.80-proxy.service: api@internal
+      traefik.http.routers.80-proxy.entrypoints: 80
+      traefik.http.routers.80-proxy.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN-app.localhost}}`)
+
+      # https://doc.traefik.io/traefik/middlewares/http/redirectscheme/
+      traefik.http.middlewares.redirect-https.redirectscheme.scheme: https
+      traefik.http.middlewares.redirect-https.redirectscheme.permanent: true
+      traefik.http.routers.80-proxy.middlewares: redirect-https@docker
+
+      # https://doc.traefik.io/traefik/middlewares/http/basicauth/
+      # sudo apt install -y apache2-utils
+      # htpasswd -nB admin
+      # escape '$' with '$$' in docker-compose.yml
+      traefik.http.middlewares.auth.basicauth.users: ${TRAEFIK_AUTH:-${APPS_AUTH-admin:$$2y$$05$$dyoejH44m0Lrpvg1bVaF4.ZGlGMOzTyMGZjU6qkal1TGSyUN4FwRS}}
+      traefik.http.routers.443-proxy.middlewares: auth
+
+      traefik.http.routers.443-proxy.service: api@internal
+      traefik.http.routers.443-proxy.entrypoints: 443
+      traefik.http.routers.443-proxy.tls: true
+      traefik.http.routers.443-proxy.tls.certresolver: certs
+      traefik.http.routers.443-proxy.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN:-app.localhost}}`)
+
+volumes:
+  data:
+
+networks:
+  apps:
+    name: ${APPS_NETWORK:-apps}
