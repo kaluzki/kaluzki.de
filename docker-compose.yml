@@ -2,19 +2,17 @@ version: '3.7'
 
 services:
 
-  data:
+  traefik-data:
     image: busybox
     container_name: traefik-data
     network_mode: "none"
     restart: "no"
     volumes:
-      - data:/data
+      - traefik:/data
     command: sh -c "chmod -Rv 600 /data/*"
 
-  proxy:
-    depends_on:
-      - data
-    image: traefik:2.10.3
+  traefik:
+    image: traefik:2.10
     hostname: traefik
     container_name: traefik
     security_opt:
@@ -26,9 +24,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
-      - data:/data
+      - traefik:/data
       - ${TRAEFIK_CONFIG:-/dev/null}:/config:ro
-
+    depends_on:
+      - traefik-data
     ports:
       - "80:80"
       - "443:443"
@@ -63,7 +62,12 @@ services:
       # htpasswd -nB admin
       # escape '$' with '$$' in docker-compose.yml
       traefik.http.middlewares.auth.basicauth.users: ${TRAEFIK_AUTH:-${APPS_AUTH-admin:$$2y$$05$$dyoejH44m0Lrpvg1bVaF4.ZGlGMOzTyMGZjU6qkal1TGSyUN4FwRS}}
-      traefik.http.routers.443-proxy.middlewares: auth
+      traefik.http.routers.443-traefik.middlewares: auth
+      traefik.http.routers.443-traefik.service: api@internal
+      traefik.http.routers.443-traefik.entrypoints: 443
+      traefik.http.routers.443-traefik.tls: true
+      traefik.http.routers.443-traefik.tls.certresolver: certs
+      traefik.http.routers.443-traefik.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN:-app.localhost}}`)
 
       traefik.http.routers.443-proxy.service: api@internal
       traefik.http.routers.443-proxy.entrypoints: 443
@@ -72,7 +76,7 @@ services:
       traefik.http.routers.443-proxy.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN:-app.localhost}}`)
 
 volumes:
-  data:
+  traefik:
 
 networks:
   apps:
