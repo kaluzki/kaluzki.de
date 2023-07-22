@@ -74,6 +74,8 @@ services:
     networks:
       - ${APPS_NETWORK:-apps}
     volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
       - mysql:/var/lib/mysql
     environment:
       MYSQL_USER: ${MYSQL_USER:-root}
@@ -87,6 +89,9 @@ services:
     restart: unless-stopped
     networks:
       - ${APPS_NETWORK:-apps}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     environment:
       MYSQL_USER: ${MYSQL_USER:-root}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-root}
