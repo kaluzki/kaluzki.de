@@ -42,29 +42,26 @@ services:
       - "--providers.file.directory=/config"
       - "--providers.file.watch=true"
       - "--entrypoints.80.address=:80"
+      # https://doc.traefik.io/traefik/middlewares/http/redirectscheme/
+      - "--entrypoints.80.http.redirections.entrypoint.to=:443"
+      - "--entrypoints.80.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.80.http.redirections.entrypoint.permanent=true"
       - "--entrypoints.443.address=:443"
       - "--certificatesresolvers.certs.acme.storage=/data/acme.json"
       - "--certificatesresolvers.certs.acme.httpchallenge.entrypoint=80"
     labels:
       traefik.enable: true
-      traefik.http.routers.80-traefik.service: api@internal
-      traefik.http.routers.80-traefik.entrypoints: 80
-      traefik.http.routers.80-traefik.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN-app.localhost}}`)
-      # https://doc.traefik.io/traefik/middlewares/http/redirectscheme/
-      traefik.http.middlewares.redirect-https.redirectscheme.scheme: https
-      traefik.http.middlewares.redirect-https.redirectscheme.permanent: true
-      traefik.http.routers.80-traefik.middlewares: redirect-https@docker
-      # https://doc.traefik.io/traefik/middlewares/http/basicauth/
-      # sudo apt install -y apache2-utils
-      # htpasswd -nB admin
-      # escape '$' with '$$' in docker-compose.yml
-      traefik.http.middlewares.auth.basicauth.users: ${TRAEFIK_AUTH:-${APPS_AUTH-admin:$$2y$$05$$dyoejH44m0Lrpvg1bVaF4.ZGlGMOzTyMGZjU6qkal1TGSyUN4FwRS}}
       traefik.http.routers.443-traefik.middlewares: auth
       traefik.http.routers.443-traefik.service: api@internal
       traefik.http.routers.443-traefik.entrypoints: 443
       traefik.http.routers.443-traefik.tls: true
       traefik.http.routers.443-traefik.tls.certresolver: certs
       traefik.http.routers.443-traefik.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${APPS_DOMAIN:-app.localhost}}`)
+      # https://doc.traefik.io/traefik/middlewares/http/basicauth/
+      # sudo apt install -y apache2-utils
+      # htpasswd -nB admin
+      # escape '$' with '$$' in docker-compose.yml
+      traefik.http.middlewares.auth.basicauth.users: ${TRAEFIK_AUTH:-${APPS_AUTH-admin:$$2y$$05$$dyoejH44m0Lrpvg1bVaF4.ZGlGMOzTyMGZjU6qkal1TGSyUN4FwRS}}
 
   mysql:
     image: mysql:5
@@ -100,9 +97,6 @@ services:
       PMA_ARBITRARY: ${PMA_ARBITRARY:-0}
     labels:
       traefik.enable: true
-      traefik.http.routers.80-pma.entrypoints: 80
-      traefik.http.routers.80-pma.rule: Host(`${PMA_DOMAIN:-pma.${APPS_DOMAIN:-app.localhost}}`)
-      traefik.http.routers.80-pma.middlewares: redirect-https@docker
       traefik.http.routers.443-pma.entrypoints: 443
       traefik.http.routers.443-pma.tls: true
       traefik.http.routers.443-pma.tls.certresolver: certs
