@@ -1,9 +1,8 @@
 /*
 
+!/examples
+
 !/.gitignore
-!/.github
-!/.gitattributes
 !/LICENSE
 
 !/docker-compose.yml
-!/shared
