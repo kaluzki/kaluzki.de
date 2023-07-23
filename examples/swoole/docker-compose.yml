@@ -1,0 +1,35 @@
+# docker compose --env-file /apps/.env up -d
+
+version: '3.7'
+
+services:
+  swoole:
+    build: .
+    hostname: swoole
+    container_name: swoole
+    restart: unless-stopped
+    networks:
+      - apps-net
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+      - ./:/app
+    working_dir: /app
+    environment:
+      ROOT_DIR: /app
+      USER: ${USER:-root}
+    labels:
+      traefik.enable: true
+      traefik.http.services.443-swoole.loadbalancer.server.port: 9501
+      traefik.http.routers.443-swoole.service: 443-swoole
+      traefik.http.routers.443-swoole.entrypoints: 443
+      traefik.http.routers.443-swoole.tls: true
+      traefik.http.routers.443-swoole.tls.certresolver: certs
+      traefik.http.routers.443-swoole.rule: Host(`swoole.${APPS_DOMAIN:-app.localhost}`)
+
+networks:
+  apps-net:
+    name: ${APPS_NET:-apps-net}
+    external: true

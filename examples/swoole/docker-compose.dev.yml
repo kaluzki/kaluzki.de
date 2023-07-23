@@ -1,0 +1,8 @@
+# APPS_NET=? docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+# docker compose exec -ti -u $(id -u):$(id -g) swoole bash
+services:
+  swoole:
+    environment:
+      # https://github.com/swoole/docker-swoole/blob/master/examples/00-autoreload/docker-compose.yml#L6
+      AUTORELOAD_ANY_FILES: "0"
+      AUTORELOAD_PROGRAMS: "server"
