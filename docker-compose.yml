@@ -19,7 +19,7 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
     networks:
-      - apps
+      - apps-net
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /etc/localtime:/etc/localtime:ro
@@ -70,7 +70,7 @@ services:
     container_name: mysql
     restart: unless-stopped
     networks:
-      - apps
+      - apps-net
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -88,7 +88,7 @@ services:
     container_name: pma
     restart: unless-stopped
     networks:
-      - apps
+      - apps-net
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -112,5 +112,5 @@ volumes:
   mysql:
 
 networks:
-  apps:
-    name: ${APPS_NETWORK:-apps}
+  apps-net:
+    name: ${APPS_NET:-apps-net}
