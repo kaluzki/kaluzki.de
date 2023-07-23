@@ -2,7 +2,14 @@
 # docker compose exec -ti -u $(id -u):$(id -g) swoole bash
 services:
   swoole:
+    build:
+      target: dev
     environment:
       # https://github.com/swoole/docker-swoole/blob/master/examples/00-autoreload/docker-compose.yml#L6
       AUTORELOAD_ANY_FILES: "0"
       AUTORELOAD_PROGRAMS: "server"
+      # https://github.com/swoole/docker-swoole/tree/master/examples/34-debug-with-xdebug
+      PHP_IDE_CONFIG: "serverName=swoole"
+      XDEBUG_SESSION: "PHPSTORM"
+    extra_hosts:
+      host.docker.internal: host-gateway

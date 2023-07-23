@@ -4,7 +4,8 @@ version: '3.7'
 
 services:
   swoole:
-    build: .
+    build:
+      target: prod
     hostname: swoole
     container_name: swoole
     restart: unless-stopped
