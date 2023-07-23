@@ -4,11 +4,10 @@ services:
 
   traefik-data:
     image: busybox
-    container_name: traefik-data
     network_mode: "none"
     restart: "no"
     volumes:
-      - traefik:/data
+      - traefik-vol:/data
     command: sh -c "chmod -Rv 600 /data/*"
 
   traefik:
@@ -24,7 +23,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
-      - traefik:/data
+      - traefik-vol:/data
       - ${TRAEFIK_CONFIG:-/dev/null}:/config:ro
     depends_on:
       - traefik-data
@@ -74,7 +73,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
-      - mysql:/var/lib/mysql
+      - mysql-vol:/var/lib/mysql
     environment:
       MYSQL_USER: ${MYSQL_USER:-root}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-root}
@@ -108,8 +107,8 @@ services:
       - mysql
 
 volumes:
-  traefik:
-  mysql:
+  traefik-vol:
+  mysql-vol:
 
 networks:
   apps-net:
