@@ -63,6 +63,7 @@ services:
       # escape '$' with '$$' in docker-compose.yml
       traefik.http.middlewares.auth.basicauth.users: ${TRAEFIK_AUTH:-${APPS_AUTH-admin:$$2y$$05$$dyoejH44m0Lrpvg1bVaF4.ZGlGMOzTyMGZjU6qkal1TGSyUN4FwRS}}
 
+  # docker compose --profile mysql up -d
   mysql:
     image: mysql:5
     hostname: mysql
@@ -78,6 +79,8 @@ services:
       MYSQL_USER: ${MYSQL_USER:-root}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-root}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-${MYSQL_PASSWORD:-root}}
+    profiles:
+      - mysql
 
   pma:
     image: phpmyadmin:5.2
@@ -101,6 +104,8 @@ services:
       traefik.http.routers.443-pma.tls: true
       traefik.http.routers.443-pma.tls.certresolver: certs
       traefik.http.routers.443-pma.rule: Host(`${PMA_DOMAIN:-pma.${APPS_DOMAIN:-app.localhost}}`)
+    profiles:
+      - mysql
 
 volumes:
   traefik:
