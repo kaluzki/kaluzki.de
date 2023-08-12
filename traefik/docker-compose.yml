@@ -51,12 +51,15 @@ services:
       - --certificatesresolvers.certs.acme.httpchallenge.entrypoint=80
     labels:
       traefik.enable: true
-      traefik.http.routers.443-traefik.middlewares: auth
-      traefik.http.routers.443-traefik.service: api@internal
-      traefik.http.routers.443-traefik.entrypoints: 443
-      traefik.http.routers.443-traefik.tls: true
-      traefik.http.routers.443-traefik.tls.certresolver: certs
-      traefik.http.routers.443-traefik.rule: Host(`traefik.${APPS_DOMAIN:-app.localhost}`)
+      traefik.http.routers.traefik.service: api@internal
+      traefik.http.routers.traefik.entrypoints: 443
+      traefik.http.routers.traefik.tls: true
+      traefik.http.routers.traefik.tls.certresolver: certs
+      # https://github.com/traefik/traefik/issues/5853#issuecomment-663914401
+      traefik.http.routers.traefik.rule: Host(`${APPS_DOMAIN:-app.localhost}`) && (PathPrefix(`/traefik/`) || HeadersRegexp(`Referer`, `.*/traefik/.*`))
+      # https://doc.traefik.io/traefik/middlewares/http/stripprefixregex/
+      traefik.http.middlewares.traefik-strip.stripprefix.prefixes: /traefik/
+      traefik.http.routers.traefik.middlewares: auth,traefik-strip
       # https://doc.traefik.io/traefik/middlewares/http/basicauth/
       # sudo apt install -y apache2-utils
       # htpasswd -nB admin
