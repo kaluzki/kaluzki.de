@@ -1,10 +1,10 @@
-# docker compose --env-file /apps/.env up -d
+# docker compose --env-file /apps/.env up --remove-orphans -d
 version: "3.8"
 
 services:
 
   traefik:
-    image: traefik:2.10
+    image: traefik:2.10.4
     hostname: traefik
     container_name: traefik
     security_opt:
@@ -30,17 +30,18 @@ services:
       # https://doc.traefik.io/traefik/observability/access-logs/
       - --accesslog=true
       - --accesslog.fields.names.StartUTC=drop
-      # https://doc.traefik.io/traefik/observability/metrics/datadog/
-      - --metrics.datadog=true
+      # https://doc.traefik.io/traefik/observability/metrics/prometheus/
+      - --metrics.prometheus=true
+      - --metrics.prometheus.addrouterslabels=true
       # https://doc.traefik.io/traefik/observability/tracing/overview/
-      - --tracing=true
-      - --tracing.datadog=true
+      #- --tracing=true
+      #- --tracing.datadog=true
       # https://doc.traefik.io/traefik/providers/docker/
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       # https://doc.traefik.io/traefik/providers/file/
-      - --providers.file.directory=/config
-      - --providers.file.watch=true
+      #- --providers.file.directory=/config
+      #- --providers.file.watch=true
       # https://doc.traefik.io/traefik/middlewares/http/redirectscheme/
       - --entrypoints.80.address=:80
       - --entrypoints.80.http.redirections.entrypoint.to=:443
@@ -77,8 +78,35 @@ services:
       - traefik:/data
     command: sh -c "chmod -Rv 600 /data/*"
 
+  prometheus:
+    image: prom/prometheus:v2.46.0
+    hostname: prometheus
+    container_name: prometheus
+    volumes:
+      - ./etc/prometheus.yml:/etc/prometheus.yml:ro
+      - prometheus:/data
+
+    # https://prometheus.io/docs/prometheus/latest/command-line/prometheus/
+    command:
+      - --log.level=warn
+      - --config.file=/etc/prometheus.yml
+      - --storage.tsdb.retention.size=256MB
+      - --web.external-url=/prometheus/
+    labels:
+      traefik.enable: true
+      traefik.http.services.prometheus.loadbalancer.server.port: 9090
+      traefik.http.routers.prometheus.service: prometheus
+      traefik.http.routers.prometheus.entrypoints: 443
+      traefik.http.routers.prometheus.tls: true
+      traefik.http.routers.prometheus.tls.certresolver: certs
+      traefik.http.routers.prometheus.rule: Host(`${APPS_DOMAIN:-app.localhost}`) && PathPrefix(`/prometheus`)
+      traefik.http.routers.prometheus.middlewares: auth
+
 volumes:
   traefik:
+    name: traefik
+  prometheus:
+    name: prometheus
 
 networks:
   default:
