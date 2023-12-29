@@ -1,0 +1,200 @@
+# docker compose --profile=bootstrap up --remove-orphans -d
+
+version: "3.8"
+
+volumes:
+  traefik:
+    name: traefik
+  mkcert:
+    name: mkcert
+  prometheus:
+    name: prometheus
+  mysql-8:
+    name: mysql-8
+
+networks:
+  default:
+    name: ${APPS_NET:-apps}
+    attachable: true
+
+services:
+  traefik-data:
+    profiles:
+      - bootstrap
+    container_name: traefik-data
+    network_mode: "none"
+    restart: "no"
+    build:
+      dockerfile_inline: |
+        FROM alpine
+        RUN cd /tmp \
+            && apk update && apk add ca-certificates && rm -rf /var/cache/apk/* \
+            && wget "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64" \
+            && chmod +x mkcert* \
+            && mv mkcert* /usr/local/bin/mkcert
+        ENV CAROOT=/mkcert
+        WORKDIR /traefik
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /usr/local/share/ca-certificates:/usr/local/share/ca-certificates
+      - mkcert:/mkcert
+      - traefik:/traefik
+    command:
+      - sh
+      - -c
+      - |
+        mkcert -install
+        mkdir -p provider letsencrypt
+        cd provider
+        [ -f mkcert-default.crt ] || mkcert -cert-file mkcert-default.crt -key-file mkcert-default.key "*.app.localhost" app.localhost
+        [ -f mkcert-default.yml ] || tee mkcert-default.yml <<EOF
+        tls:
+          stores:
+            default:
+              defaultCertificate:
+                certFile: /traefik/provider/mkcert-default.crt
+                keyFile: /traefik/provider/mkcert-default.key
+        EOF
+
+  traefik:
+    image: traefik:2.10.7
+    hostname: traefik
+    container_name: traefik
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik:/traefik
+    environment:
+      - TZ=${APPS_TZ:-Europe/Berlin}
+    command:
+      # https://doc.traefik.io/traefik/operations/api/
+      - --api=true
+      - --api.dashboard=true
+      - --api.insecure=false
+      #- --api.debug=true
+      # https://doc.traefik.io/traefik/observability/logs/
+      - --log.level=warning
+      # https://doc.traefik.io/traefik/observability/access-logs/
+      - --accesslog=true
+      - --accesslog.fields.names.StartUTC=drop
+      # https://doc.traefik.io/traefik/observability/metrics/prometheus/
+      - --metrics.prometheus=true
+      - --metrics.prometheus.addrouterslabels=true
+      # https://doc.traefik.io/traefik/observability/tracing/overview/
+      #- --tracing=true
+      #- --tracing.datadog=true
+      # https://doc.traefik.io/traefik/providers/docker/
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      # https://doc.traefik.io/traefik/providers/file/
+      - --providers.file.directory=/traefik/provider
+      - --providers.file.watch=true
+      # https://doc.traefik.io/traefik/middlewares/http/redirectscheme/
+      - --entrypoints.80.address=:80
+      - --entrypoints.80.http.redirections.entrypoint.to=:443
+      - --entrypoints.80.http.redirections.entrypoint.scheme=https
+      - --entrypoints.80.http.redirections.entrypoint.permanent=true
+      - --entrypoints.443.address=:443
+      - --certificatesresolvers.letsencrypt.acme.storage=/traefik/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=80
+    labels:
+      traefik.enable: true
+      traefik.http.routers.traefik.service: api@internal
+      traefik.http.routers.traefik.entrypoints: 443
+      traefik.http.routers.traefik.tls: true
+      traefik.http.routers.traefik.tls.certresolver: letsencrypt
+
+      # https://traefik.app.localhost/
+      # traefik.http.routers.traefik.rule: Host(`traefik.${APPS_DOMAIN:-app.localhost}`)
+
+      # https://app.localhost/traefik/
+      # see https://github.com/traefik/traefik/issues/5853#issuecomment-663914401
+      traefik.http.routers.traefik.rule: Host(`${APPS_DOMAIN:-app.localhost}`) && (PathPrefix(`/traefik/`) || HeadersRegexp(`Referer`, `.*/traefik/.*`))
+      # see https://doc.traefik.io/traefik/middlewares/http/stripprefixregex/
+      traefik.http.middlewares.traefik-strip.stripprefix.prefixes: /traefik/
+
+      traefik.http.routers.traefik.middlewares: auth,traefik-strip
+      # see https://doc.traefik.io/traefik/middlewares/http/basicauth/
+      # sudo apt install -y apache2-utils
+      # htpasswd -nB admin
+      # escape '$' with '$$' in compose.yml
+      # admin/admin
+      traefik.http.middlewares.auth.basicauth.users: ${APPS_AUTH:-admin:$$2y$$05$$yrOjlUeRyiwyOhg8mR42HuJeuQXJdZOFcwgHk3eDU5vD5E2AzyaDa}
+
+  prometheus:
+    profiles:
+      - monitoring
+    image: prom/prometheus:v2.46.0
+    hostname: prometheus
+    container_name: prometheus
+    volumes:
+      - ./etc/prometheus.yml:/etc/prometheus.yml:ro
+      - prometheus:/data
+
+    # https://prometheus.io/docs/prometheus/latest/command-line/prometheus/
+    command:
+      - --log.level=warn
+      - --config.file=/etc/prometheus.yml
+      - --storage.tsdb.retention.size=256MB
+      - --web.external-url=/prometheus/
+    labels:
+      traefik.enable: true
+      traefik.http.services.prometheus.loadbalancer.server.port: 9090
+      traefik.http.routers.prometheus.service: prometheus
+      traefik.http.routers.prometheus.entrypoints: 443
+      traefik.http.routers.prometheus.tls: true
+      traefik.http.routers.prometheus.tls.certresolver: letsencrypt
+      traefik.http.routers.prometheus.rule: Host(`${APPS_DOMAIN:-app.localhost}`) && PathPrefix(`/prometheus`)
+      traefik.http.routers.prometheus.middlewares: auth
+
+  mysql-8:
+    profiles:
+      - mysql
+    image: mysql:8
+    hostname: mysql-8
+    container_name: mysql-8
+    restart: unless-stopped
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - mysql-8:/var/lib/mysql
+    environment:
+      MYSQL_USER: ${MYSQL_USER:-mysql}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-${MYSQL_PASSWORD:-root}}
+
+  pma:
+    profiles:
+      - mysql
+    image: phpmyadmin:5
+    hostname: pma
+    container_name: pma
+    restart: unless-stopped
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-${MYSQL_PASSWORD:-root}}
+      PMA_HOST: mysql-8
+      PMA_ARBITRARY: ${PMA_ARBITRARY:-0}
+      PMA_ABSOLUTE_URI: https://${APPS_DOMAIN:-app.localhost}/pma/
+    labels:
+      traefik.enable: true
+      traefik.http.routers.pma.entrypoints: 443
+      traefik.http.routers.pma.tls: true
+      traefik.http.routers.pma.tls.certresolver: letsencrypt
+      #traefik.http.routers.pma.rule: Host(`pma.${APPS_DOMAIN:-app.localhost}`)
+
+      traefik.http.routers.pma.rule: Host(`${APPS_DOMAIN:-app.localhost}`) && PathPrefix(`/pma`)
+      # https://doc.traefik.io/traefik/middlewares/http/stripprefixregex/
+      traefik.http.middlewares.pma-strip.stripprefix.prefixes: /pma/
+      traefik.http.routers.pma.middlewares: auth,pma-strip
+
